@@ -1,6 +1,4 @@
 import validateEmailService from '../services/emailValidation.service.js'
-import batchValidate from '../services/batchEmailValidation.service.js'
-import readEmails from '../utils/fileReader.js'
 
 export const validateEmail = async (req, res) => {
   const { email } = req.body
