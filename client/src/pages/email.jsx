@@ -1,13 +1,24 @@
 import { useState } from "react";
-import { validateSingleEmail, validateBulkEmails, } from "../service/api";
+import { validateSingleEmail, validateBulkEmails } from "../service/api";
 
-/* -------------------- Reusable Components -------------------- */
+/* -------------------- Helpers -------------------- */
+
+const mapResults = (results) => ({
+  syntax: results.syntax ? "valid" : "invalid",
+  domain: results.domain ? "valid" : "invalid",
+  mx: results.mx ? "valid" : "invalid",
+  disposable: results.disposable ? "invalid" : "valid",
+  roleBased: results.roleBased ? "invalid" : "valid",
+});
+
+/* -------------------- UI Components -------------------- */
+
 function Badge({ status }) {
   const map = {
     valid: "bg-green-100 text-green-700",
-    risk: "bg-amber-100 text-amber-700",
     invalid: "bg-red-100 text-red-700",
   };
+
   return (
     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${map[status]}`}>
       {status.toUpperCase()}
@@ -15,339 +26,444 @@ function Badge({ status }) {
   );
 }
 
-function ConfidenceCard({ level }) {
-  const map = {
-    High: "bg-gradient-to-br from-green-50 to-green-100 text-green-700 border-green-200",
-    Medium: "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-700 border-amber-200",
-    Low: "bg-gradient-to-br from-red-50 to-red-100 text-red-700 border-red-200",
-  };
+function KPI({ label, value }) {
   return (
-    <div
-      className={`border rounded-xl p-6 text-center shadow-md ${map[level]} transition transform hover:scale-105`}
-    >
-      <p className="text-xs uppercase tracking-wide text-slate-500">Confidence Score</p>
-      <p className="text-3xl font-bold mt-2">{level}</p>
-    </div>
-  );
-}
-
-function KPI({ label, value, color }) {
-  const map = {
-    green: "bg-gradient-to-br from-green-50 to-green-100 text-green-700",
-    amber: "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-700",
-    red: "bg-gradient-to-br from-red-50 to-red-100 text-red-700",
-  };
-  return (
-    <div
-      className={`rounded-xl p-6 text-center shadow-md ${map[color] || "bg-slate-50"} transition transform hover:scale-105`}
-    >
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+    <div className="rounded-xl p-6 text-center shadow-md bg-slate-100">
+      <p className="text-xs uppercase text-slate-500">{label}</p>
       <p className="text-2xl font-bold mt-1">{value}</p>
     </div>
   );
 }
 
+function ResultsTable({ data }) {
+  if (!data || !data.length) return null;
+
+  const today = new Date().toLocaleDateString("en-US", {
+    month: "long",
+    day: "2-digit",
+    year: "numeric",
+  });
+
+  const Tag = ({ label, ok }) => (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium
+        ${ok ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}
+    >
+      ✓ {label}
+    </span>
+  );
+
+  return (
+    <div className="overflow-x-auto border rounded-xl mt-6">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-slate-600">
+          <tr className="border-b">
+            <th className="px-4 py-3">
+              <input type="checkbox" />
+            </th>
+            <th className="px-4 py-3 text-left">Email</th>
+            <th className="px-4 py-3 text-left">Status</th>
+            <th className="px-4 py-3 text-left">Reason</th>
+            <th className="px-4 py-3 text-right">Confidence</th>
+            <th className="px-4 py-3 text-right">Date</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {data.map((r, i) => (
+            <tr
+              key={i}
+              className="border-b hover:bg-slate-50 transition"
+            >
+              {/* Checkbox */}
+              <td className="px-4 py-3">
+                <input type="checkbox" />
+               {/* function to download selected emails */  }       
+
+
+
+              </td>
+
+              {/* Email */}
+
+              <td className="px-4 py-3 font-bold text-slate-800">
+                {r.email}
+              </td>
+
+              {/* Status */}
+              <td className="px-4 py-3">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                  valid
+                </span>
+              </td>
+
+              {/* Reason tags */}
+              <td className="px-4 py-3">
+                <div className="flex flex-wrap gap-2">
+                  <Tag label="FORMAT" ok={r.syntax === "valid"} />
+                  <Tag label="DNS" ok={r.domain === "valid"} />
+                  <Tag label="MX" ok={r.mx === "valid"} />
+                  <Tag label="SMTP" ok={r.smtp === "valid"} />
+                  <Tag label="ROLE-BASED" ok={r.roleBased === "valid"} />
+                  
+                  <Tag
+                    label="DISPOSABLE CHECK"
+                    ok={r.disposable === "valid"}
+                  />
+                  
+                </div>
+              </td>
+              <td className="px-4 py-3 text-right text-slate-500">
+<confidence className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-700">
+                    ★ {r.confidence.toUpperCase()}
+                  </confidence>
+                  </td>
+
+              {/* Date */}
+              <td className="px-4 py-3 text-right text-slate-500">
+                {today}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* -------------------- Main Dashboard -------------------- */
+
 export default function EmailSanitizationDashboard() {
   const [activeTab, setActiveTab] = useState("single");
   const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [bulkData, setBulkData] = useState(null);
+  const [bulkFile, setBulkFile] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const [file, setFile] = useState(null);
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const [bulkResults, setBulkResults] = useState([]);
-  const [step, setStep] = useState(1);
+  /* -------------------- Single Validation -------------------- */
 
-  /* -------------------- Actions -------------------- */
   const runSingleValidation = async () => {
+    if (!email) return alert("Please enter an email");
+
+    setLoading(true);
+    setResult(null);
+
     try {
-      setLoading(true);
-      setResult(null);
       const data = await validateSingleEmail(email);
-      setResult(data);
+
+      setResult([
+        {
+          email: data.email,
+          ...mapResults(data.results),
+          confidence: data.confidence,
+        },
+      ]);
     } catch (err) {
-      console.error(err);
       alert(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBulkUpload = (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    setFile(f);
-    setStep(1);
-  };
+  /* -------------------- Bulk Validation -------------------- */
 
   const runBulkValidation = async () => {
+    if (!bulkFile) return alert("Please upload a file");
+
+    setLoading(true);
+    setBulkData(null);
+
     try {
-      if (!file) return;
-      setBulkLoading(true);
-      setStep(2);
-      const results = await validateBulkEmails(file);
-      setBulkResults(results);
-      setStep(3);
+      const data = await validateBulkEmails(bulkFile);
+
+      const merged = [
+        ...(data.validEmails || []),
+        ...(data.invalidEmails || []),
+      ].map((item) => ({
+        email: item.email,
+        ...mapResults(item.results),
+        confidence: item.confidence,
+      }));
+
+      setBulkData({
+        summary: {
+          total: data.total,
+          valid: data.validCount,
+          invalid: data.invalidCount,
+        },
+        results: merged,
+      });
     } catch (err) {
-      console.error(err);
       alert(err.message);
     } finally {
-      setBulkLoading(false);
+      setLoading(false);
     }
   };
-   
-const downloadHighConfidenceEmails = () => {
-  if (!bulkResults || bulkResults.length === 0) {
-    alert("No bulk results available yet");
-    return;
-  }
 
-  // Filter only High confidence emails
-  const highEmails = bulkResults
-    .filter((item) => item.confidence === "High")
-    .map((item) => item.email);
+  /* -------------------- Download High Confidence -------------------- */
 
-  if (highEmails.length === 0) {
-    alert("No high-confidence emails found");
-    return;
-  }
+  const downloadHighConfidence = () => {
+    if (!bulkData) return;
 
-  // Create a text file and trigger download
-  const blob = new Blob([highEmails.join("\n")], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "high_confidence_emails.txt";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-};
+    const highEmails = bulkData.results
+      .filter((r) => r.confidence === "High")
+      .map((r) => r.email)
+      .join("\n");
 
-
-
-  const summary = {
-    total: bulkResults.length,
-    high: bulkResults.filter((r) => r.confidence === "High").length,
-    medium: bulkResults.filter((r) => r.confidence === "Medium").length,
-    low: bulkResults.filter((r) => r.confidence === "Low").length,
+    const blob = new Blob([highEmails], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "high_confidence_emails.txt";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   /* -------------------- UI -------------------- */
-  return (
-    <div className="min-h-screen bg-slate-100">
-      {/* Header */}
-      <header className="bg-white border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <h1 className="text-lg font-semibold text-slate-800">Email Sanitization Engine</h1>
-          <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
-            Production
-          </span>
+
+  // return (
+  //   <div className="min-h-screen bg-slate-100">
+  //     <header className="bg-white border-b shadow-sm">
+  //       <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+  //         <h1 className="text-lg font-semibold">Email Sanitization Engine</h1>
+  //         <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
+  //           Production
+  //         </span>
+  //       </div>
+  //     </header>
+
+  //     <main className="max-w-7xl mx-auto px-6 py-10 space-y-10">
+  //       <div className="bg-white rounded-xl shadow-md">
+  //         <div className="border-b flex">
+  //           {["single", "bulk"].map((t) => (
+  //             <button
+  //               key={t}
+  //               onClick={() => setActiveTab(t)}
+  //               className={`px-6 py-4 font-semibold ${
+  //                 activeTab === t
+  //                   ? "border-b-2 border-indigo-600 text-indigo-600"
+  //                   : "text-slate-500"
+  //               }`}
+  //             >
+  //               {t === "single" ? "Single Validation" : "Bulk Validation"}
+  //             </button>
+  //           ))}
+  //         </div>
+
+  //         {activeTab === "single" && (
+  //           <div className="p-6 space-y-6">
+  //             <input
+  //               value={email}
+  //               onChange={(e) => setEmail(e.target.value)}
+  //               placeholder="user@example.com"
+  //               className="w-full border rounded-lg px-4 py-3"
+  //             />
+
+  //             <button
+  //               onClick={runSingleValidation}
+  //               disabled={loading}
+  //               className="bg-indigo-600 text-white px-6 py-3 rounded-lg"
+  //             >
+  //               {loading ? "Validating..." : "Run Validation"}
+  //             </button>
+
+  //             {result && <ResultsTable data={result} />}
+  //           </div>
+  //         )}
+
+  //         {activeTab === "bulk" && (
+  //           <div className="p-6 space-y-6">
+  //             <input
+  //               type="file"
+  //               accept=".txt,.csv"
+  //               onChange={(e) => setBulkFile(e.target.files[0])}
+  //             />
+
+  //             <button
+  //               onClick={runBulkValidation}
+  //               disabled={loading}
+  //               className="bg-indigo-600 text-white px-6 py-3 rounded-lg"
+  //             >
+  //               {loading ? "Analyzing..." : "Start Analysis"}
+  //             </button>
+
+  //             {bulkData && (
+  //               <button
+  //                 onClick={downloadHighConfidence}
+  //                 className="bg-green-600 text-white px-6 py-3 rounded-lg"
+  //               >
+  //                 Download High Confidence Emails
+  //               </button>
+  //             )}
+
+  //             {bulkData && (
+  //               <>
+  //                 <div className="grid md:grid-cols-3 gap-4">
+  //                   <KPI label="Total" value={bulkData.summary.total} />
+  //                   <KPI label="Valid" value={bulkData.summary.valid} />
+  //                   <KPI label="Invalid" value={bulkData.summary.invalid} />
+  //                 </div>
+
+  //                 <ResultsTable data={bulkData.results} />
+  //               </>
+  //             )}
+  //           </div>
+  //         )}
+  //       </div>
+  //     </main>
+  //   </div>
+  // );
+
+return (
+<div className="min-h-screen bg-slate-100 flex flex-col">
+  {/* Header */}
+  <header className="bg-white/80 backdrop-blur border-b shadow-sm sticky top-0 z-10">
+    <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold">
+          ✉️
         </div>
-      </header>
+        <h1 className="text-lg font-semibold text-slate-800">
+          Email Sanitization Engine
+        </h1>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-6 py-10 space-y-10">
-        {/* Hero Section */}
-        <section className="bg-gradient-to-br from-white to-slate-50 rounded-xl shadow-md p-10 transition transform hover:scale-101">
-          <h2 className="text-3xl font-bold text-slate-800">
-            Enterprise Email Sanitization & Risk Scoring
-          </h2>
-          <p className="text-slate-500 mt-3 max-w-3xl">
-            Multi-layered email validation using syntax, DNS, MX, and behavioral risk detection.
-          </p>
-          <div className="grid md:grid-cols-4 gap-6 mt-8 text-sm">
-            {[
-              "Syntax & DNS Validation",
-              "Disposable & Role Detection",
-              "Spam-Trap Risk Analysis",
-              "Confidence-Based Scoring",
-            ].map((f) => (
-              <div key={f} className="p-4 bg-white rounded-xl shadow-sm border transition hover:shadow-md">
-                ✔ {f}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Tabs Section */}
-        <section className="bg-white rounded-xl shadow-md">
-          {/* Tabs */}
-          <div className="border-b flex">
-            {["single", "bulk"].map((t) => (
-              <button
-                key={t}
-                onClick={() => setActiveTab(t)}
-                className={`px-6 py-4 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 ring-indigo-400 ${
-                  activeTab === t
-                    ? "border-b-2 border-indigo-600 text-indigo-600"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {t === "single" ? "Single Email Validation" : "Bulk Email Validation"}
-              </button>
-            ))}
-          </div>
-
-          {/* Single Email Validation */}
-          {activeTab === "single" && (
-            <div className="p-8 space-y-6">
-              <div>
-                <label className="block text-sm font-medium mb-2">Email Address</label>
-                <input
-                  type="email"
-                  className="w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  placeholder="user@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-
-              <button
-                disabled={!email || loading}
-                onClick={runSingleValidation}
-                className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-6 py-3 rounded-lg font-semibold shadow hover:shadow-md transition disabled:opacity-50"
-              >
-                {loading ? "Running Validation…" : "Run Validation"}
-              </button>
-
-              {result && (
-                <div className="relative grid md:grid-cols-2 gap-6">
-                  <button
-                    onClick={() => setResult(null)}
-                    className="absolute -top-4 right-0 text-xs text-slate-500 hover:text-slate-700"
-                  >
-                    Clear Results ✕
-                  </button>
-
-                  {[
-                    ["Syntax Validation", result.syntax],
-                    ["Domain & MX Records", result.domain],
-                    ["Disposable Email", result.disposable],
-                    ["Role-Based Address", result.role],
-                    ["Catch-All Domain", result.catchall],
-                    ["Spam-Trap Risk", result.spamtrap],
-                  ].map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="border rounded-lg p-4 flex justify-between shadow-sm transition hover:shadow-md"
-                    >
-                      <div>
-                        <p className="font-medium">{label}</p>
-                        <p className="text-xs text-slate-500">Evaluated using layered detection logic</p>
-                      </div>
-                      <Badge status={value} />
-                    </div>
-                  ))}
-                  <ConfidenceCard level={result.confidence} />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Bulk Email Validation */}
-          {activeTab === "bulk" && (
-            <div className="p-8 space-y-6">
-              <div className="border-2 border-dashed rounded-xl p-10 text-center bg-slate-50">
-                <input type="file" accept=".csv,.xls,.xlsx,.txt" onChange={handleBulkUpload} />
-                {file && (
-                  <p className="mt-3 text-sm text-slate-600">
-                    {file.name} ({Math.round(file.size / 1024)} KB)
-                  </p>
-                )}
-              </div>
-
-              <div className="flex gap-4 text-sm">
-                {["Upload File", "Analyze Emails", "Review Results"].map((s, i) => (
-                  <div
-                    key={s}
-                    className={`px-4 py-2 rounded-lg ${
-                      step >= i + 1 ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
-                    {s}
-                  </div>
-                ))}
-              </div>
-
-              <button
-                disabled={!file || bulkLoading}
-                onClick={runBulkValidation}
-                className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-6 py-3 rounded-lg font-semibold shadow hover:shadow-md transition disabled:opacity-50"
-              >
-                {bulkLoading ? "Processing…" : "Start Analysis"}
-              </button>
-
-              {bulkResults.length > 0 && (
-                <>
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => setBulkResults([])}
-                      className="text-xs text-slate-500 hover:text-slate-700"
-                    >
-                      Clear Results ✕
-                    </button>
-                  </div>
-
-                  {/* KPI Cards */}
-                  <div className="grid md:grid-cols-4 gap-4">
-                    <KPI label="Total" value={summary.total} />
-                    <KPI label="High" value={summary.high} color="green" />
-                    <KPI label="Medium" value={summary.medium} color="amber" />
-                    <KPI label="Low" value={summary.low} color="red" />
-                  </div>
-
-                  <button
-  onClick={() => downloadHighConfidenceEmails(bulkResults)}
-  className="bg-green-600 text-white px-4 py-2 rounded-lg shadow hover:shadow-md"
->
-  Download High-Confidence Emails
-</button>
-
-
-                  {/* Results Table */}
-                  <div className="overflow-auto border rounded-xl max-h-[420px] shadow-md">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-slate-50 sticky top-0">
-                        <tr>
-                          {[
-                            "Email",
-                            "Syntax",
-                            "Domain",
-                            "Disposable",
-                            "Role",
-                            "Catch-All",
-                            "Spam-Trap",
-                            "Confidence",
-                          ].map((h) => (
-                            <th key={h} className="px-4 py-3 text-left font-medium text-slate-600">
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bulkResults.map((r, i) => (
-                          <tr key={i} className="even:bg-slate-50 transition hover:bg-slate-100">
-                            <td className="px-4 py-2">{r.email}</td>
-                            <td className="px-4 py-2"><Badge status={r.syntax} /></td>
-                            <td className="px-4 py-2"><Badge status={r.domain} /></td>
-                            <td className="px-4 py-2"><Badge status={r.disposable} /></td>
-                            <td className="px-4 py-2"><Badge status={r.role} /></td>
-                            <td className="px-4 py-2"><Badge status={r.catchall} /></td>
-                            <td className="px-4 py-2"><Badge status={r.spamtrap} /></td>
-                            <td className="px-4 py-2 font-semibold">{r.confidence}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </section>
-      </main>
+      <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold flex items-center gap-1">
+        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+        Production
+      </span>
     </div>
-  );
+  </header>
+
+  {/* Main Content */}
+  <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-10 space-y-10">
+    {/* Hero Section */}
+    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-blue-500 text-white shadow-xl p-10">
+      
+      {/* Decorative Blur */}
+      <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl"></div>
+      <div className="absolute bottom-0 left-0 w-96 h-40 bg-black/10 blur-2xl"></div>
+
+      <div className="relative z-10">
+        <h2 className="text-3xl md:text-4xl font-bold leading-tight">
+          Enterprise Email Sanitization <br />
+          <span className="text-indigo-200">& Risk Intelligence Platform</span>
+        </h2>
+
+        <p className="mt-4 max-w-3xl text-indigo-100 text-base">
+          Advanced multi-layered email validation combining syntax analysis,
+          DNS & MX verification, disposable detection, and confidence-based
+          risk scoring — built for scale and accuracy.
+        </p>
+
+        {/* Feature Cards */}
+        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-6 mt-10 text-sm">
+          {[
+            { label: "Syntax Analysis", icon: "🧩" },
+            { label: "DNS Validation", icon: "🌐" },
+            { label: "MX Record Check", icon: "📮" },
+            { label: "Disposable & Role Detection", icon: "🛡️" },
+            { label: "Confidence-Based Scoring", icon: "📊" },
+          ].map((f) => (
+            <div
+              key={f.label}
+              className="bg-white/90 text-slate-800 rounded-xl p-5 shadow-md backdrop-blur
+                         hover:scale-[1.03] hover:shadow-xl transition-all duration-300
+                         flex items-center gap-3"
+            >
+              <span className="text-xl">{f.icon}</span>
+              <span className="font-medium">{f.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+      {/* Main Card */}
+      <section className="bg-white rounded-2xl shadow-md overflow-hidden">
+
+        {/* Tabs */}
+        <div className="border-b flex">
+          {["single", "bulk"].map((t) => (
+            <button
+              key={t}
+              onClick={() => setActiveTab(t)}
+              className={`px-6 py-4 font-semibold transition ${
+                activeTab === t
+                  ? "border-b-2 border-indigo-600 text-indigo-600"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {t === "single" ? "Single Validation" : "Bulk Validation"}
+            </button>
+          ))}
+        </div>
+
+        {/* Single Validation */}
+        {activeTab === "single" && (
+          <div className="p-8 space-y-6">
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="user@example.com"
+              className="w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+
+            <button
+              onClick={runSingleValidation}
+              disabled={loading}
+              className="bg-indigo-600 hover:bg-indigo-700 transition text-white px-6 py-3 rounded-lg disabled:opacity-60"
+            >
+              {loading ? "Validating..." : "Run Validation"}
+            </button>
+
+            {result && <ResultsTable data={result} />}
+          </div>
+        )}
+
+        {/* Bulk Validation */}
+        {activeTab === "bulk" && (
+          <div className="p-8 space-y-6">
+            <input
+              type="file"
+              accept=".txt,.csv"
+              onChange={(e) => setBulkFile(e.target.files[0])}
+              className="block"
+            />
+
+            <button
+              onClick={runBulkValidation}
+              disabled={loading}
+              className="bg-indigo-600 hover:bg-indigo-700 transition text-white px-6 py-3 rounded-lg disabled:opacity-60"
+            >
+              {loading ? "Analyzing..." : "Start Analysis"}
+            </button>
+
+            {bulkData && (
+              <button
+                onClick={downloadHighConfidence}
+                className="bg-green-600 hover:bg-green-700 transition text-white px-6 py-3 rounded-lg"
+              >
+                Download High Confidence Emails
+              </button>
+            )}
+
+            {bulkData && (
+              <>
+                <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  <KPI label="Total" value={bulkData.summary.total} />
+                  <KPI label="Valid" value={bulkData.summary.valid} />
+                  <KPI label="Invalid" value={bulkData.summary.invalid} />
+                </div>
+
+                <ResultsTable data={bulkData.results} />
+              </>
+            )}
+          </div>
+        )}
+      </section>
+    </main>
+  </div>
+);
 }
