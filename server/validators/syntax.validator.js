@@ -11,7 +11,7 @@ const syntaxValidator = (email) => {
 
 const invalidUsername = 
   !username || // empty
-  username.length > 64 ||
+  username.length > 64 ||username.includes('.')||
   /\s/.test(username) || // whitespace
   username.startsWith('--') ||
   username.startsWith('__') ||

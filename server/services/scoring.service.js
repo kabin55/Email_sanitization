@@ -4,6 +4,7 @@ const scoringService = (r) => {
   if (!r.syntax) score -= 30
   if (!r.domain) score -= 40
   if (!r.mx) score -= 40
+  if (!r.smtp) score -= 40
   if (r.disposable) score -= 50
   if (r.roleBased) score -= 50
 
